@@ -1,0 +1,59 @@
+name: Update dependencies
+
+on:
+  schedule:
+    # weekly Monday 6am UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.UPDATE_TOKEN }}
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Update nixpkgs
+        run: nix flake update nixpkgs
+      - name: Update next-browser
+        run: nix shell github:Mic92/nix-update -c nix-update --flake next-browser
+      - name: Update plannotator
+        run: nix shell github:Mic92/nix-update -c nix-update --flake plannotator
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet; then
+            echo "has-changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-changes=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create/update pull request
+        if: steps.diff.outputs.has-changes == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.UPDATE_TOKEN }}
+          branch: update/deps
+          title: "deps: update nixpkgs, next-browser, and plannotator"
+          body: |
+            Automated dependency update.
+
+            - `nixpkgs` flake input updated
+            - `next-browser` updated to latest version
+            - `plannotator` updated to latest version
+          labels: dependencies,automated
+          delete-branch: true
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_TOKEN }}
+        run: |
+          gh pr merge "${{ steps.cpr.outputs.pull-request-number }}" --auto --squash
