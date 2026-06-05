@@ -1,4 +1,5 @@
 {
+  coreutils,
   lib,
   stdenv,
   fetchFromGitHub,
@@ -46,6 +47,8 @@ stdenv.mkDerivation (finalAttrs: {
       --replace-fail 'headless: false,' $'headless: false,\n        executablePath: process.env.NEXT_BROWSER_CHROMIUM_EXECUTABLE,'
     substituteInPlace dist/browser.js \
       --replace-fail 'headless,' $'headless,\n        executablePath: process.env.NEXT_BROWSER_CHROMIUM_EXECUTABLE,'
+    substituteInPlace dist/paths.js \
+      --replace-fail 'const dir = join(homedir(), ".next-browser");' 'const dir = process.env.NEXT_BROWSER_RUNTIME_DIR ?? join(homedir(), ".next-browser");'
   '';
 
   installPhase = ''
@@ -56,9 +59,15 @@ stdenv.mkDerivation (finalAttrs: {
 
     makeWrapper ${nodejs}/bin/node "$out/bin/next-browser" \
       --add-flags "$out/lib/node_modules/${finalAttrs.pname}/dist/cli.js" \
-      --set HOME /tmp \
-      --set XDG_CONFIG_HOME /tmp \
-      --set XDG_CACHE_HOME /tmp \
+      --run 'runtime_root="''${XDG_RUNTIME_DIR:-''${TMPDIR:-/tmp}}/next-browser"' \
+      --run 'project_root="''${NEXT_BROWSER_PROJECT_ROOT:-$PWD}"' \
+      --run 'project_key="$(${coreutils}/bin/printf %s "$project_root" | ${coreutils}/bin/sha256sum | ${coreutils}/bin/cut -c1-16)"' \
+      --run 'runtime_dir="$runtime_root/$project_key"' \
+      --run '${coreutils}/bin/mkdir -p "$runtime_dir" "$runtime_dir/config" "$runtime_dir/cache"' \
+      --run 'export NEXT_BROWSER_RUNTIME_DIR="$runtime_dir"' \
+      --run 'export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$runtime_dir/config}"' \
+      --run 'export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$runtime_dir/cache}"' \
+      --run 'if [ -z "''${NEXT_BROWSER_HEADLESS:-}" ] && [ -z "''${DISPLAY:-}" ] && [ -z "''${WAYLAND_DISPLAY:-}" ]; then export NEXT_BROWSER_HEADLESS=1; fi' \
       --set-default NEXT_BROWSER_CHROMIUM_EXECUTABLE "${chromium}/bin/chromium" \
       --set-default PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS true \
       --unset PLAYWRIGHT_BROWSERS_PATH
