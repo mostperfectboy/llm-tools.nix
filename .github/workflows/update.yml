@@ -24,9 +24,9 @@ jobs:
       - name: Update nixpkgs
         run: nix flake update nixpkgs
       - name: Update next-browser
-        run: nix shell github:Mic92/nix-update -c nix-update --flake next-browser
+        run: nix shell github:Mic92/nix-update -c nix-update --flake next-browser --version-regex 'v?(\d+\.\d+\.\d+)$'
       - name: Update plannotator
-        run: nix shell github:Mic92/nix-update -c nix-update --flake plannotator
+        run: nix shell github:Mic92/nix-update -c nix-update --flake plannotator --version-regex 'v?(\d+\.\d+\.\d+)$'
       - name: Check for changes
         id: diff
         run: |
